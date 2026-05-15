@@ -1,2 +1,2 @@
-﻿## Etsy and Shared
+## Etsy and Shared
 Repository for sharing work between Pasha and Nastya.
