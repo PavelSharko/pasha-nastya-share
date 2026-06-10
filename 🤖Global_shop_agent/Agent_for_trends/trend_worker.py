@@ -12,6 +12,8 @@ except ImportError:
 
 # Настройка путей
 AGENT_DIR = os.path.dirname(os.path.abspath(__file__))
+# Заимствуем уже готовую сессию у eRank агента
+AUTH_JSON = os.path.normpath(os.path.join(AGENT_DIR, "..", "Aget_for_erank", "auth.json"))
 # Путь: 🤖Global_shop_agent/база_данных_для_агентов/actual_topics/
 DB_DIR = os.path.normpath(os.path.join(AGENT_DIR, "..", "база_данных_для_агентов", "actual_topics"))
 
