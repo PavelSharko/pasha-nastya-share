@@ -1,8 +1,10 @@
 import argparse
 import os
 import json
+import subprocess
 from datetime import datetime
 import asyncio
+import urllib.request
 from playwright.async_api import async_playwright
 try:
     import inquirer
@@ -16,6 +18,43 @@ AGENT_DIR = os.path.dirname(os.path.abspath(__file__))
 # Путь: 🤖Global_shop_agent/база_данных_для_агентов/actual_topics/
 DB_DIR = os.path.normpath(os.path.join(AGENT_DIR, "..", "база_данных_для_агентов", "actual_topics"))
 
+# Возможные пути установки Chrome на Windows
+CHROME_PATHS = [
+    r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+    r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
+    os.path.expandvars(r"%LOCALAPPDATA%\Google\Chrome\Application\chrome.exe")
+]
+
+def is_cdp_running(port=9222):
+    """Проверяет, доступен ли Chrome DevTools Protocol."""
+    try:
+        url = f"http://localhost:{port}/json/version"
+        response = urllib.request.urlopen(url, timeout=2)
+        return response.getcode() == 200
+    except Exception:
+        return False
+
+def launch_chrome_cdp(port=9222):
+    """Запускает Chrome с открытым портом отладки."""
+    chrome_path = next((p for p in CHROME_PATHS if os.path.exists(p)), None)
+    if not chrome_path:
+        print("❌ ОШИБКА: Google Chrome не найден на компьютере!")
+        return False
+        
+    print(f"⚙️ Запуск Google Chrome с портом {port}...")
+    try:
+        # Запускаем в фоновом режиме, чтобы скрипт мог продолжить работу
+        subprocess.Popen([
+            chrome_path,
+            f"--remote-debugging-port={port}",
+            "--remote-allow-origins=*", # Решает проблему с CORS в новых версиях
+            "--restore-last-session"
+        ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        return True
+    except Exception as e:
+        print(f"❌ Ошибка запуска Chrome: {e}")
+        return False
+
 async def fetch_trends(geo, date_range, category):
     print(f"\n🔍 Начинаю поиск трендов...")
     print(f"📍 Регион: {geo}")
@@ -25,12 +64,26 @@ async def fetch_trends(geo, date_range, category):
     print("⏳ Сбор данных из Google Trends (через API)...")
     await asyncio.sleep(1) # Заглушка
     
+    # Проверка и авто-запуск Chrome
+    if not is_cdp_running():
+        print("🌐 Chrome с открытым портом 9222 не найден. Запускаю автоматически...")
+        if launch_chrome_cdp():
+            await asyncio.sleep(3) # Даем браузеру время на старт
+        else:
+            return [] # Если запустить не удалось - прерываем
+    
     print("🌐 Подключение к живому Chrome (CDP) для анализа Etsy...")
     try:
         async with async_playwright() as p:
-            # Подключаемся к запущенному Chrome с флагом --remote-debugging-port=9222
+            # Подключаемся к запущенному Chrome
             browser = await p.chromium.connect_over_cdp("http://localhost:9222")
-            context = browser.contexts[0]
+            
+            # Ищем активный контекст или создаем новый, если их нет
+            if len(browser.contexts) > 0:
+                context = browser.contexts[0]
+            else:
+                context = await browser.new_context()
+                
             page = await context.new_page()
             
             print("🚀 Переход на Etsy Trends...")
@@ -42,18 +95,14 @@ async def fetch_trends(geo, date_range, category):
             await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
             await page.wait_for_timeout(2000)
             
-            # Простая заглушка: попытаемся выцепить заголовки H2, если они есть
             page_title = await page.title()
             print(f"✅ Страница загружена: {page_title}")
             
             await page.close()
-            # Браузер не закрываем, так как он "живой" (пользовательский)
+            # Важно: Не вызываем browser.close(), иначе закроем весь Chrome пользователя
             
     except Exception as e:
-        print("\n❌ ОШИБКА ПОДКЛЮЧЕНИЯ К CHROME!")
-        print("Убедитесь, что ваш браузер Google Chrome открыт и запущен с флагом:")
-        print("--remote-debugging-port=9222")
-        print(f"Детали ошибки: {e}\n")
+        print(f"\n❌ КРИТИЧЕСКАЯ ОШИБКА: {e}\n")
         return []
 
     # Возвращаем Мок-данные для отчета
