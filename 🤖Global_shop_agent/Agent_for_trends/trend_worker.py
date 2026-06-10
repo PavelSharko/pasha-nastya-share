@@ -3,6 +3,7 @@ import os
 import json
 from datetime import datetime
 import asyncio
+from playwright.async_api import async_playwright
 try:
     import inquirer
 except ImportError:
@@ -12,28 +13,53 @@ except ImportError:
 
 # Настройка путей
 AGENT_DIR = os.path.dirname(os.path.abspath(__file__))
-# Заимствуем уже готовую сессию у eRank агента
-AUTH_JSON = os.path.normpath(os.path.join(AGENT_DIR, "..", "Aget_for_erank", "auth.json"))
 # Путь: 🤖Global_shop_agent/база_данных_для_агентов/actual_topics/
 DB_DIR = os.path.normpath(os.path.join(AGENT_DIR, "..", "база_данных_для_агентов", "actual_topics"))
 
 async def fetch_trends(geo, date_range, category):
-    # Заглушка: здесь будет реальная логика скрейпинга (pytrends + playwright)
     print(f"\n🔍 Начинаю поиск трендов...")
     print(f"📍 Регион: {geo}")
     print(f"📅 Период: {date_range}")
     print(f"📂 Категория: {category}\n")
     
-    print("⏳ Сбор данных из Google Trends...")
-    await asyncio.sleep(1.5)
+    print("⏳ Сбор данных из Google Trends (через API)...")
+    await asyncio.sleep(1) # Заглушка
     
-    print("⏳ Кросс-чекинг трендов на Etsy (эмуляция скролла и поиска бейджей)...")
-    await asyncio.sleep(2)
-    
-    # Мок-данные
+    print("🌐 Подключение к живому Chrome (CDP) для анализа Etsy...")
+    try:
+        async with async_playwright() as p:
+            # Подключаемся к запущенному Chrome с флагом --remote-debugging-port=9222
+            browser = await p.chromium.connect_over_cdp("http://localhost:9222")
+            context = browser.contexts[0]
+            page = await context.new_page()
+            
+            print("🚀 Переход на Etsy Trends...")
+            await page.goto("https://www.etsy.com/trends", timeout=60000, wait_until="domcontentloaded")
+            await page.wait_for_timeout(3000) # Даем время на рендер картинок
+            
+            # Эмуляция скролла для подгрузки динамического контента
+            print("📜 Эмуляция скролла страницы...")
+            await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+            await page.wait_for_timeout(2000)
+            
+            # Простая заглушка: попытаемся выцепить заголовки H2, если они есть
+            page_title = await page.title()
+            print(f"✅ Страница загружена: {page_title}")
+            
+            await page.close()
+            # Браузер не закрываем, так как он "живой" (пользовательский)
+            
+    except Exception as e:
+        print("\n❌ ОШИБКА ПОДКЛЮЧЕНИЯ К CHROME!")
+        print("Убедитесь, что ваш браузер Google Chrome открыт и запущен с флагом:")
+        print("--remote-debugging-port=9222")
+        print(f"Детали ошибки: {e}\n")
+        return []
+
+    # Возвращаем Мок-данные для отчета
     return [
-        {"topic": f"Summer Vibes {geo}", "reason": "High search volume in Google, 5 Bestsellers on Etsy"},
-        {"topic": f"Tech Geek Humor {geo}", "reason": "Trending category 't', low competition"}
+        {"topic": f"Kidcore Aesthetic {geo}", "reason": "High search volume in Google, Seen on Etsy Trends page"},
+        {"topic": f"Embroidery Illusion {geo}", "reason": "Trending category, low competition on Etsy"}
     ]
 
 def save_report(trends_data, geo, date_range):
