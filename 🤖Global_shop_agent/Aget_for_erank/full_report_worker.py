@@ -1,11 +1,13 @@
 import asyncio
 import os
 import pandas as pd
+from datetime import datetime
 from playwright.async_api import async_playwright
 
 AGENT_DIR = os.path.dirname(os.path.abspath(__file__))
 AUTH_JSON = os.path.join(AGENT_DIR, "auth.json")
-RAW_DIR = "/Users/pavelsarko/Library/Mobile Documents/iCloud~md~obsidian/Documents/work-notes/RAW"
+# Путь к базе данных агента (относительный)
+DB_DIR = os.path.join(AGENT_DIR, "DB_agent")
 
 # Инструменты eRank
 TOOLS = {
@@ -59,7 +61,9 @@ async def download_csv_pro(page, tool_url, keyword, country, tool_name):
 
 async def run_pro_dossier(keyword, country):
     async with async_playwright() as p:
-        if not os.path.exists(AUTH_JSON): return
+        if not os.path.exists(AUTH_JSON):
+            print(f"ERROR: Файл авторизации {AUTH_JSON} не найден.")
+            return
 
         browser = await p.chromium.launch(headless=True)
         context = await browser.new_context(storage_state=AUTH_JSON, viewport={'width':1920, 'height':1080})
@@ -71,16 +75,26 @@ async def run_pro_dossier(keyword, country):
             if res: results[name] = res
 
         await browser.close()
-final_md = os.path.join(RAW_DIR, f"ERANK_DOSSIER_{keyword.replace(' ','_')}.md")
-etsy_link = f"https://www.etsy.com/search?q={keyword.replace(' ', '+')}&is_best_seller=true"
-with open(final_md, "w", encoding="utf-8") as f:
-    f.write(f"# 🛡️ Ультимативное досье eRank: {keyword}\n\n")
-    f.write(f"🔗 **Etsy Best Sellers:** [{etsy_link}]({etsy_link})\n\n")
+        
+        # Сохранение в DB_agent
+        os.makedirs(DB_DIR, exist_ok=True)
+        date_str = datetime.now().strftime("%Y-%m-%d")
+        safe_kw = keyword.replace(" ", "_")
+        
+        # Формат имени: имя_тега_дата_регион
+        filename_base = f"{safe_kw}_{date_str}_{country}_dossier"
+        final_md = os.path.join(DB_DIR, f"{filename_base}.md")
+        
+        etsy_link = f"https://www.etsy.com/search?q={keyword.replace(' ', '+')}&is_best_seller=true"
+        
+        with open(final_md, "w", encoding="utf-8") as f:
+            f.write(f"# 🛡️ Ультимативное досье eRank: {keyword}\n\n")
+            f.write(f"**Дата:** {date_str}  \n")
+            f.write(f"**Регион:** {country}  \n\n")
+            f.write(f"🔗 **Etsy Best Sellers:** [{etsy_link}]({etsy_link})\n\n")
 
-    for name, (res_type, content) in results.items():
-...
-print(f"🔗 Etsy Link: {etsy_link}")
-print(f"🎉 ДОСЬЕ ГОТОВО: {final_md}")
+            for name, (res_type, content) in results.items():
+                f.write(f"## 🛠️ {name}\n\n")
                 if res_type == "CSV":
                     try:
                         df = pd.read_csv(content)
@@ -88,15 +102,16 @@ print(f"🎉 ДОСЬЕ ГОТОВО: {final_md}")
                         df.insert(0, '#', range(1, len(df) + 1))
                         f.write(df.to_markdown(index=False))
                         os.remove(content)
-                    except: f.write("Ошибка парсинга таблицы.\n")
+                    except Exception as e:
+                        f.write(f"Ошибка парсинга таблицы: {e}\n")
                 else:
                     f.write(f"```text\n{content}\n```\n")
-                f.write("\n")
+                f.write("\n\n")
         
         print(f"🎉 ДОСЬЕ ГОТОВО: {final_md}")
 
 if __name__ == "__main__":
     import sys
-    kw = sys.argv[1] if len(sys.argv) > 1 else "dad"
+    kw = sys.argv[1] if len(sys.argv) > 1 else "tshirt cat"
     ct = sys.argv[2] if len(sys.argv) > 2 else "US"
     asyncio.run(run_pro_dossier(kw, ct))

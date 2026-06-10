@@ -2,26 +2,46 @@ import asyncio
 import os
 import json
 import sys
+from datetime import datetime
+import urllib.parse
 from playwright.async_api import async_playwright
 
 # Конфигурация путей
 AGENT_DIR = os.path.dirname(os.path.abspath(__file__))
 AUTH_JSON = os.path.join(AGENT_DIR, "auth.json")
-RAW_DIR = "/Users/pavelsarko/Library/Mobile Documents/iCloud~md~obsidian/Documents/work-notes/RAW"
+# Путь к базе данных агента (относительный)
+DB_DIR = os.path.join(AGENT_DIR, "DB_agent")
 
-def save_results(all_results, captured_json_data, keyword_label):
-    os.makedirs(RAW_DIR, exist_ok=True)
+def get_region_from_url(url):
+    try:
+        parsed = urllib.parse.urlparse(url)
+        params = urllib.parse.parse_qs(parsed.query)
+        return params.get('country', ['unknown'])[0]
+    except:
+        return "unknown"
+
+def save_results(all_results, captured_json_data, keyword_label, target_url):
+    os.makedirs(DB_DIR, exist_ok=True)
+    
+    region = get_region_from_url(target_url)
+    date_str = datetime.now().strftime("%Y-%m-%d")
     safe_kw = keyword_label.replace(" ", "_")
     
+    # Формат имени: имя_тега_дата_регион
+    filename_base = f"{safe_kw}_{date_str}_{region}_multi"
+    
     if captured_json_data:
-        json_path = os.path.join(RAW_DIR, f"erank_raw_intercepted_{safe_kw}.json")
+        json_path = os.path.join(DB_DIR, f"{filename_base}_raw.json")
         with open(json_path, "w", encoding="utf-8") as f:
             json.dump(captured_json_data, f, indent=2, ensure_ascii=False)
         print(f"LOG: JSON сохранен: {json_path}")
 
-    output_md = os.path.join(RAW_DIR, f"erank_multi_page_{safe_kw}.md")
+    output_md = os.path.join(DB_DIR, f"{filename_base}.md")
     with open(output_md, "w", encoding="utf-8") as f:
         f.write(f"# 📊 Глубокий отчет (Multi-Page): {keyword_label}\n\n")
+        f.write(f"**Дата:** {date_str}  \n")
+        f.write(f"**Регион:** {region}  \n\n")
+        
         if all_results:
             # Берем заголовки из первого элемента
             headers = ["#"] + [k for k in all_results[0].keys() if k != "Source_Page"] + ["Page"]
@@ -108,11 +128,11 @@ async def run_pro_extraction(target_url, keyword_label, max_pages=5):
                         print("LOG: Кнопка навигации не найдена.")
                         break
             
-            save_results(all_results, captured_json_data, keyword_label)
+            save_results(all_results, captured_json_data, keyword_label, target_url)
 
         except Exception as e:
             print(f"ERROR: {e}")
-            save_results(all_results, captured_json_data, keyword_label)
+            save_results(all_results, captured_json_data, keyword_label, target_url)
         finally:
             await browser.close()
 

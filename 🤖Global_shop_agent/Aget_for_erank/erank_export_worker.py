@@ -1,10 +1,21 @@
 import asyncio
 import os
+from datetime import datetime
+import urllib.parse
 from playwright.async_api import async_playwright
 
 AGENT_DIR = os.path.dirname(os.path.abspath(__file__))
 AUTH_JSON = os.path.join(AGENT_DIR, "auth.json")
-RAW_DIR = "/Users/pavelsarko/Library/Mobile Documents/iCloud~md~obsidian/Documents/work-notes/RAW"
+# Путь к базе данных агента (относительный)
+DB_DIR = os.path.join(AGENT_DIR, "DB_agent")
+
+def get_region_from_url(url):
+    try:
+        parsed = urllib.parse.urlparse(url)
+        params = urllib.parse.parse_qs(parsed.query)
+        return params.get('country', ['unknown'])[0]
+    except:
+        return "unknown"
 
 async def run_export_extraction(target_url, keyword_label):
     async with async_playwright() as p:
@@ -45,9 +56,15 @@ async def run_export_extraction(target_url, keyword_label):
 
             download = await download_info.value
             
-            # Сохраняем файл в RAW
+            # Сохранение в DB_agent
+            os.makedirs(DB_DIR, exist_ok=True)
+            
+            region = get_region_from_url(target_url)
+            date_str = datetime.now().strftime("%Y-%m-%d")
             safe_kw = keyword_label.replace(" ", "_")
-            download_path = os.path.join(RAW_DIR, f"erank_export_{safe_kw}.csv")
+            
+            # Формат имени: имя_тега_дата_регион
+            download_path = os.path.join(DB_DIR, f"{safe_kw}_{date_str}_{region}_export.csv")
             await download.save_as(download_path)
             
             print(f"SUCCESS: Файл успешно скачан и сохранен: {download_path}")

@@ -2,13 +2,23 @@ import asyncio
 import os
 import json
 import sys
+from datetime import datetime
+import urllib.parse
 from playwright.async_api import async_playwright
 
 # Конфигурация путей
 AGENT_DIR = os.path.dirname(os.path.abspath(__file__))
 AUTH_JSON = os.path.join(AGENT_DIR, "auth.json")
-# Путь к глобальной папке RAW
-RAW_DIR = "/Users/pavelsarko/Library/Mobile Documents/iCloud~md~obsidian/Documents/work-notes/RAW"
+# Путь к базе данных агента (относительный)
+DB_DIR = os.path.join(AGENT_DIR, "DB_agent")
+
+def get_region_from_url(url):
+    try:
+        parsed = urllib.parse.urlparse(url)
+        params = urllib.parse.parse_qs(parsed.query)
+        return params.get('country', ['unknown'])[0]
+    except:
+        return "unknown"
 
 async def run_extraction(target_url, keyword_label):
     async with async_playwright() as p:
@@ -85,17 +95,26 @@ async def run_extraction(target_url, keyword_label):
 
             print(f"LOG: Извлечено строк: {len(table_data)}")
 
-            # Сохранение в RAW
-            os.makedirs(RAW_DIR, exist_ok=True)
+            # Сохранение в DB_agent
+            os.makedirs(DB_DIR, exist_ok=True)
+            
+            region = get_region_from_url(target_url)
+            date_str = datetime.now().strftime("%Y-%m-%d")
             safe_keyword = keyword_label.replace(" ", "_")
-            output_json = os.path.join(RAW_DIR, f"erank_deep_{safe_keyword}.json")
-            output_md = os.path.join(RAW_DIR, f"erank_deep_report_{safe_keyword}.md")
+            
+            # Формат имени: имя_тега_дата_регион
+            filename_base = f"{safe_keyword}_{date_str}_{region}"
+            
+            output_json = os.path.join(DB_DIR, f"{filename_base}.json")
+            output_md = os.path.join(DB_DIR, f"{filename_base}.md")
 
             with open(output_json, "w", encoding="utf-8") as f:
                 json.dump(table_data, f, indent=4, ensure_ascii=False)
 
             with open(output_md, "w", encoding="utf-8") as f:
                 f.write(f"# 📊 Глубокий отчет eRank: {keyword_label}\n\n")
+                f.write(f"**Дата:** {date_str}  \n")
+                f.write(f"**Регион:** {region}  \n\n")
                 
                 # Формируем заголовки таблицы Markdown
                 if table_data:
