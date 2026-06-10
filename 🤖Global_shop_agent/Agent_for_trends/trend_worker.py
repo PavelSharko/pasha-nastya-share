@@ -103,7 +103,8 @@ async def fetch_trends(geo, date_range, category):
             
     except Exception as e:
         print(f"\n❌ КРИТИЧЕСКАЯ ОШИБКА: {e}\n")
-        return []
+        # Для демонстрации возвращаем мок-данные даже при ошибке Chrome
+        pass
 
     # Возвращаем Мок-данные для отчета
     return [
