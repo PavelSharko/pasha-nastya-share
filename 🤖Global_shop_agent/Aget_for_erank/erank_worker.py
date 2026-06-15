@@ -138,9 +138,17 @@ async def run_extraction(target_url, keyword_label):
             return False
 
 if __name__ == "__main__":
-    test_keyword = "tshirt cat"
-    test_url = f"https://members.erank.com/keyword-tool?keyword={test_keyword.replace(' ', '%20')}&country=EEA&source=etsy"
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--keyword", default="tshirt cat")
+    parser.add_argument("--country", default="US")
+    args = parser.parse_args()
     
-    loop = asyncio.get_event_loop()
-    success = loop.run_until_complete(run_extraction(test_url, test_keyword))
+    test_keyword = args.keyword
+    test_url = f"https://members.erank.com/keyword-tool?keyword={test_keyword.replace(' ', '%20')}&country={args.country}&source=etsy"
+    
+    try:
+        success = asyncio.run(run_extraction(test_url, test_keyword))
+    except KeyboardInterrupt:
+        pass
     if not success: sys.exit(1)
